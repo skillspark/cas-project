@@ -128,10 +128,10 @@ sample_matches_df = pd.DataFrame(data = {
     'l_SvGms': [17.0, 12.0, 8.0, 10.0, 12.0],
     'l_bpSaved': [4.0, 3.0, 7.0, 6.0, 5.0],
     'l_bpFaced': [7.0, 6.0, 11.0, 8.0, 9.0],
-    'winner_rank': [1612.0, 211.0, 48.0, 768.0, 167.0],
-    'winner_rank_points': [63.0, 157.0, 726.0, 616.0, 219.0],
-    'loser_rank': [595.0, 723.0, 649.0, 616.0, 873.0],
-    'loser_rank_points': [None, 723.0, 649.0, 616.0, 873.0]
+    'winner_rank': [11.0, 211.0, 48.0, 45.0, 167.0],
+    'winner_rank_points': [1612.0, 157.0, 726.0, 768.0, 219.0],
+    'loser_rank': [63.0, 49.0, 59.0, 61.0, 34.0],
+    'loser_rank_points': [595.0, 723.0, 649.0, 616.0, 873.0]
 }
 )
 
@@ -248,14 +248,14 @@ fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
 
 # Plot the first histogram for winner_rank
 ax1.hist(matches_with_rank['winner_rank'], bins=20, color='blue', alpha=0.7)
-ax1.set_title('Distribution of winner_rank')
-ax1.set_xlabel('Values')
+ax1.set_title('Distribution of winner rank')
+ax1.set_xlabel('Rank')
 ax1.set_ylabel('Frequency')
 
 # Plot the second histogram for loser_rank
 ax2.hist(matches_with_rank['loser_rank'], bins=20, color='green', alpha=0.7)
-ax2.set_title('Distribution of loser_rank')
-ax2.set_xlabel('Values')
+ax2.set_title('Distribution of loser rank')
+ax2.set_xlabel('Rank')
 ax2.set_ylabel('Frequency')
 
 # Display the histograms
@@ -439,9 +439,15 @@ def hide_winner_loser(input_df):
     # Copy the input DataFrame to a new one
     df = input_df.copy()
 
-    # Add player_1_name and player_2_name columns
-    df['player_1_name'] = df.apply(lambda row: min(row['winner_name'], row['loser_name']), axis=1)
-    df['player_2_name'] = df.apply(lambda row: max(row['winner_name'], row['loser_name']), axis=1)
+    # Add player_1_name and player_2_name columns based on higher rank
+    df['player_1_name'] = np.where((df['winner_rank'].fillna(float('inf')) <= df['loser_rank'].fillna(float('inf'))),
+                                   df['winner_name'],
+                                   df['loser_name']
+                                   )
+    df['player_2_name'] = np.where((df['winner_rank'].fillna(float('inf')) > df['loser_rank'].fillna(float('inf'))),
+                                   df['winner_name'],
+                                   df['loser_name']
+                                   )
 
     # Transfer the values from 'winner_' and 'loser_' features to 'player_1_' and 'player_2_' features, according to who was the winner & loser
     for feat in features:
@@ -477,6 +483,13 @@ output_df = hide_winner_loser(sample_matches_df)
 output_df.info()
 
 # %%
+
+output_df[['tourney_id'
+           , 'player_1_name', 'player_1_rank'
+           , 'player_2_name', 'player_2_rank']]
+
+# %%
+
 # replace the winner and loser columns with player_1 and player_2 for the matches dataset
 matches_processed_df= hide_winner_loser(matches_processed_df)
 matches_processed_df.head()
@@ -662,7 +675,9 @@ matches_processed_df[['player_1_rank', 'player_2_rank']].describe()
 
 # %%
 # make a new copy of the dataframe, for starting the feature engineering
-matches_features_df = matches_processed_df.copy()
+
+matches_features_df = matches_processed_df.copy().reset_index()
+
 matches_features_df.info()
 # matches_features_df.to_csv("matches_features_df.csv", sep=',', header=True)
 
@@ -732,12 +747,16 @@ matches_processed_df[['tourney_id','match_num', 'player_1_id','player_2_id',
 
 # %% [markdown]
 # ### Add feature for ranking difference
-# This feature may help our model more easily assess the how the ranking plays a factor in determining the winner of the match. It simply calculates the difference between player_2_rank and player_1_rank. In that case, if player 1 is higher ranked than player 2, the resulting number will be a positive (and vice-versa).
-# 
-# 
+
+# This feature may help our model more easily assess the how the ranking plays a factor in determining the winner of the match. It simply calculates the weight of the difference between player_2_rank and player_1_rank, by using a normalized difference. The normalized difference is expressed as a number between 0 and 1. In that case, the closer the ranking between player 1 and player 2, the higher the number will be.
 
 # %%
-matches_features_df['ranking_difference'] = matches_features_df['player_2_rank'] - matches_features_df['player_1_rank']
+# calculate max. possible rank difference
+max_possible_rank_difference = max(matches_features_df['player_2_rank'] - matches_features_df['player_1_rank'])
+
+# calculate normalized rank difference
+matches_features_df['ranking_difference'] = 1 - ((matches_features_df['player_2_rank'] - matches_features_df['player_1_rank']) / max_possible_rank_difference)
+
 
 # preview the result for the last 5 observations of the dataset
 matches_features_df[['tourney_date_dt', 'player_1_name', 'player_1_rank','player_2_name', 'player_2_rank', 'ranking_difference']].tail(5)
@@ -882,7 +901,8 @@ def calc_cum_match_counts_and_pct (df):
         else:
             player_tourney_level_cumulative_wins[(player_2_id, tourney_level)] = player_2_tourney_level_cumulative_wins + 1
 
-    # Add the cumulative match count and surface-related columns to the input dataset
+    # Add the cumulative match count and surface- and tourney level-related columns to the input dataset
+
     df['player_1_cum_match_count'] = player_1_cumulative_counts_list
     df['player_2_cum_match_count'] = player_2_cumulative_counts_list
     df['player_1_surface_cum_match_count'] = player_1_surface_cumulative_counts_list
@@ -893,6 +913,10 @@ def calc_cum_match_counts_and_pct (df):
     df['player_2_tourney_level_cum_match_count'] = player_2_tourney_level_cumulative_counts_list
     df['player_1_tourney_level_cum_win_percentage'] = player_1_tourney_level_cumulative_wins_list
     df['player_2_tourney_level_cum_win_percentage'] = player_2_tourney_level_cumulative_wins_list
+
+    # Add win percentage difference columns for surface- and tourney level
+    df['surface_win_pct_difference'] = df['player_1_surface_cum_win_percentage'] - df['player_2_surface_cum_win_percentage']
+    df['tourney_level_win_pct_difference'] = df['player_1_tourney_level_cum_win_percentage'] - df['player_2_tourney_level_cum_win_percentage']
 
     return df
 
@@ -912,7 +936,9 @@ matches_features_df[(matches_features_df['player_1_name'] == 'Roger Federer')
                                                                                 , 'player_1_name', 'player_2_name'
                                                                                 , 'winner'
                                                                                  , 'player_1_surface_cum_win_percentage','player_2_surface_cum_win_percentage'
-                                                                                 , 'player_1_tourney_level_cum_win_percentage','player_2_tourney_level_cum_win_percentage']]
+                                                                                 , 'player_1_tourney_level_cum_win_percentage','player_2_tourney_level_cum_win_percentage'
+                                                                                 , 'surface_win_pct_difference', 'tourney_level_win_pct_difference'
+                                                                                 ]]
 
 # %%
 # test surface win pct and tourney level win pct for another player
@@ -921,7 +947,9 @@ matches_features_df[(matches_features_df['player_1_name'] == 'Thomas Enqvist')
                                                                                 , 'player_1_name', 'player_2_name'
                                                                                 , 'winner'
                                                                                 , 'player_1_surface_cum_win_percentage','player_2_surface_cum_win_percentage'
-                                                                                , 'player_1_tourney_level_cum_win_percentage','player_2_tourney_level_cum_win_percentage']]
+                                                                                , 'player_1_tourney_level_cum_win_percentage','player_2_tourney_level_cum_win_percentage'
+                                                                                , 'surface_win_pct_difference', 'tourney_level_win_pct_difference']]
+
 
 # %%
 # test for 4 tournaments, each on different surface
@@ -929,7 +957,8 @@ matches_4surfaces_calc = calc_cum_match_counts_and_pct(matches_4surfaces)
 matches_4surfaces_calc[['tourney_name', 'tourney_date_dt', 'match_num', 'surface'
                                                                                 , 'player_1_name', 'player_2_name'
                                                                                 , 'winner'
-                                                                                 , 'player_1_surface_cum_win_percentage','player_2_surface_cum_win_percentage']].head(10)
+                                                                                 , 'player_1_surface_cum_win_percentage','player_2_surface_cum_win_percentage'
+                                                                                 , 'surface_win_pct_difference', 'tourney_level_win_pct_difference']].head(10)
 
 # %%
 # create a test dataset for all 5 tournament levels, and preview the columns and sample rows relevant for calculation
@@ -938,7 +967,8 @@ matches_5levels = matches_features_df[(matches_features_df['tourney_name'].isin(
                                                                                 , 'player_1_id', 'player_2_id', 'player_1_name', 'player_2_name'
                                                                                 , 'winner'
                                                                                 , 'player_1_tourney_level_cum_win_percentage','player_2_tourney_level_cum_win_percentage'
-					]]
+                                                                                , 'tourney_level_win_pct_difference'
+					                                                    ]]
 matches_5levels
 
 # %% [markdown]
@@ -950,6 +980,7 @@ matches_5levels
 
 # %%
 def calc_h2h_win_pct(df):
+
 
     # Create a dictionary to store cumulative wins and matches for each pair of players
     h2h_stats = {}
@@ -968,7 +999,8 @@ def calc_h2h_win_pct(df):
         player_pair_key = tuple(sorted([player_1_id, player_2_id]))
 
         # Update head-to-head stats for the player pair
-        h2h_stats[player_pair_key] = h2h_stats.get(player_pair_key, {'wins': 0, 'matches': 0})
+        h2h_stats[player_pair_key] = h2h_stats.get(player_pair_key, {'ppk_1_wins': 0, 'ppk_2_wins': 0, 'matches': 0}) # ppk stands for "player pair key"
+
 
         # Calculate and update head-to-head win percentages
         if h2h_stats[player_pair_key]['matches'] == 0:
@@ -977,15 +1009,19 @@ def calc_h2h_win_pct(df):
             df.at[index, 'player_2_h2h_win_pct'] = 0.0
         else:
             # For subsequent matches, calculate based on the previous match
-            player_1_win_pct = h2h_stats[player_pair_key]['wins'] / h2h_stats[player_pair_key]['matches']
+            if player_1_id == player_pair_key[0]: 
+                player_1_win_pct = h2h_stats[player_pair_key]['ppk_1_wins'] / h2h_stats[player_pair_key]['matches']
+            else: 
+                player_1_win_pct = h2h_stats[player_pair_key]['ppk_2_wins'] / h2h_stats[player_pair_key]['matches']
             df.at[index, 'player_1_h2h_win_pct'] = player_1_win_pct
             df.at[index, 'player_2_h2h_win_pct'] = 1.0 - player_1_win_pct
 
         # Update head-to-head stats for the player pair after the match
         h2h_stats[player_pair_key]['matches'] += 1
-        if winner == 'player_1':
-            h2h_stats[player_pair_key]['wins'] += 1
-
+        if ((winner == 'player_1') & (player_1_id == player_pair_key[0]) | (winner == 'player_2') & (player_2_id == player_pair_key[0])):
+            h2h_stats[player_pair_key]['ppk_1_wins'] += 1
+        else:
+            h2h_stats[player_pair_key]['ppk_2_wins'] += 1
     return df
 
 # %%
@@ -993,13 +1029,20 @@ def calc_h2h_win_pct(df):
 matches_features_df = calc_h2h_win_pct(matches_features_df)
 
 # %%
+# Calculate a h2h difference
+matches_features_df['h2h_win_pct_difference'] = matches_features_df['player_1_h2h_win_pct'] - matches_features_df['player_2_h2h_win_pct']
+
+# %%
 # create a test dataset for 2 players' head-to-head matches, and preview the columns and sample rows relevant for calculation
 
-matches_2players = matches_features_df[((matches_features_df['player_1_name'] == 'Carlos Alcaraz') & (matches_features_df['player_2_name'] == 'Jannik Sinner')) | 
-                 ((matches_features_df['player_1_name'] == 'Jannik Sinner') & (matches_features_df['player_2_name'] == 'Carlos Alcaraz'))][['tourney_name', 'tourney_date_dt', 'match_num', 'tourney_level', 'round'
-                                                                                                                                        , 'player_1_id', 'player_2_id', 'player_1_name', 'player_2_name'
+matches_2players = matches_features_df[((matches_features_df['player_1_name'] == 'Andrey Rublev') & (matches_features_df['player_2_name'] == 'Jannik Sinner')) | 
+                 ((matches_features_df['player_1_name'] == 'Jannik Sinner') & (matches_features_df['player_2_name'] == 'Andrey Rublev'))][['tourney_name', 'tourney_date_dt', 'match_num', 'tourney_level', 'round'
+                                                                                                                                        , 'player_1_id', 'player_2_id'
+                                                                                                                                        , 'player_1_name', 'player_2_name'
+                                                                                                                                        , 'player_1_rank', 'player_2_rank'
                                                                                                                                         , 'winner'
                                                                                                                                         , 'player_1_h2h_win_pct','player_2_h2h_win_pct'
+                                                                                                                                        , 'h2h_win_pct_difference'
                                                                                                                                         ]]
 matches_2players
 
@@ -1020,10 +1063,13 @@ matches_features_df.info()
 # - ranking_difference
 # - player_1_surface_cum_win_percentage     
 # - player_2_surface_cum_win_percentage
+# - surface_win_pct_difference
 # - player_1_tourney_level_cum_win_percentage
 # - player_2_tourney_level_cum_win_percentage
+# - tourney_level_win_pct_difference
 # - player_1_h2h_win_pct 
 # - player_2_h2h_win_pct
+# - h2h_win_pct_difference
 # 
 # The majority of the other features in our dataset are probably not needed,  # , 'player_1_tourney_level_cum_win_percentage'
 #                                                         # , 'player_2_tourney_level_cum_win_percentage'and when applying encoding, we'll end up with a lot of additional useless features. 
@@ -1078,14 +1124,17 @@ matches_features_trimmed_df = matches_features_df.drop(columns=[
                                                         , 'player_2_cum_match_count'
                                                         , 'player_1_surface_cum_match_count'
                                                         , 'player_2_surface_cum_match_count'
-                                                        # , 'player_1_surface_cum_win_percentage'
-                                                        # , 'player_2_surface_cum_win_percentage'
+                                                        , 'player_1_surface_cum_win_percentage'
+                                                        , 'player_2_surface_cum_win_percentage'
+                                                        # , 'tourney_level_win_pct_difference'
                                                         , 'player_1_tourney_level_cum_match_count'
                                                         , 'player_2_tourney_level_cum_match_count'
-                                                        # , 'player_1_tourney_level_cum_win_percentage'
-                                                        # , 'player_2_tourney_level_cum_win_percentage'
-                                                        # , 'player_1_h2h_win_pct'
-                                                        # , 'player_2_h2h_win_pct'
+                                                        , 'player_1_tourney_level_cum_win_percentage'
+                                                        , 'player_2_tourney_level_cum_win_percentage'
+                                                        #, 'tourney_level_win_pct_difference'
+                                                        , 'player_1_h2h_win_pct'
+                                                        , 'player_2_h2h_win_pct'
+                                                        # , 'h2h_win_pct_difference'
                                                         ], axis=1)
 matches_features_trimmed_df.info()
 
@@ -1510,6 +1559,102 @@ plot_variable_importance(model2_1_2_rf_CV_fitted.best_estimator_, X_train)
 
 # %% [markdown]
 # ### Model 3: Gradient Booster Tree Model
+=======
+# %%
+X.info()
+
+# %%
+y
+
+# %%
+plot_variable_importance(tree, X_train)
+
+# %%
+# use this when looking for the best combination of hyperparamers. 
+# the below example serves the purpose of a cross validation
+
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import make_scorer
+
+# hyperparameters for GridSearchCV
+parameters = {
+            "max_features": [8, 16],
+            'max_depth': range(1,2),
+            "min_samples_split": [2, 3, 5], 
+            'min_samples_leaf': [1, 10, 20]
+            }
+
+# make a scoring function for accuracy
+acc_score = make_scorer(accuracy_score, greater_is_better=True)
+
+# fit model
+tree_model_CV = GridSearchCV(tree, parameters, scoring=acc_score, cv=5,verbose=3) # Apply 5 Cross Validiation Folds to find best hyperparameters
+tree_model_CV.fit(X_train, y_train)
+
+# %%
+tree_model_CV.best_params_
+
+# %% [markdown]
+# ### Random Forest Model
+
+# %%
+from sklearn.ensemble import RandomForestClassifier
+
+# Instantiate Model with cross validation
+forest = RandomForestClassifier(max_depth=1, max_features = 8, min_samples_leaf = 1, min_samples_split = 2,  random_state=1)
+
+# Create Train Data
+X = train.drop("winner_player_2", axis=1)
+y = train["winner_player_2"]
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=12)
+
+# fit model
+forest.fit(X_train, y_train)
+
+#make prediction
+y_pred = forest.predict(X_test)
+
+# get prediction probabilities
+forest.predict_proba(X_test)
+
+# Evaluate Model Performance - accuracy
+acc = accuracy_score(y_test, y_pred)
+print('Accuracy: %.3f' % acc)
+
+# %%
+plot_variable_importance(forest, X_train)
+
+# %% [markdown]
+# #### Grid Search - Random Forest
+# 
+
+# %%
+# use this when looking for the best combination of hyperparamers. 
+# the below example serves the purpose of a cross validation
+
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import make_scorer
+
+# hyperparameters for GridSearchCV
+parameters = {
+            "max_features": [8, 16],
+            'max_depth': range(1,2),
+            "min_samples_split": [2, 3, 5], 
+            'min_samples_leaf': [1, 10, 20]
+            }
+
+# make a scoring function for accuracy
+acc_score = make_scorer(accuracy_score, greater_is_better=True)
+
+# fit model
+forest_model_CV = GridSearchCV(forest, parameters, scoring=acc_score, cv=5,verbose=3) # Apply 5 Cross Validiation Folds to find best hyperparameters
+forest_model_CV.fit(X_train, y_train)
+
+# %%
+forest_model_CV.best_params_
+
+# %% [markdown]
+# ### Gradient Booster Tree Model
 
 # %%
 from sklearn.ensemble import GradientBoostingClassifier
