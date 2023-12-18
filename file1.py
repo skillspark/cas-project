@@ -425,13 +425,14 @@ rankings_processed_df = rankings_df.copy()
 
 # %% [markdown]
 # #### Hide winner and loser from columns names
-# Replace columns starting with 'winner_' and 'loser_' with 'player_1_' and 'player_2_' for the required features. As we want to be able to predict who will be the winner and the loser in each match, we remove the 'winner_' and 'loser_' columns for each match, and instead replace it with player_1_ and player_2 according to which the ranking of the players. 
+# Replace columns starting with 'winner_' and 'loser_' with 'player_1_' and 'player_2_' for the required features. As we want to be able to predict who will be the winner and the loser in each match, we remove the 'winner_' and 'loser_' columns for each match, and instead replace it with player_1_ and player_2 which are the player names in alphabetical order. 
 # 
 # The features starting with 'w_' and 'l_' are measures recorded during the match and will not be used in the model for predicting the outcome, so we remove these features.
 # We will add a column at the end of the dataframe, which will serve as our y variable.
 
 # %%
 def hide_winner_loser(input_df):
+
     # List of required features to be replaced with prefixes player_1 and player_2
     features = ['id', 'seed', 'entry', 'name', 'hand', 'ht', 'ioc', 'age', 'rank', 'rank_points']
     
@@ -482,11 +483,13 @@ output_df = hide_winner_loser(sample_matches_df)
 output_df.info()
 
 # %%
+
 output_df[['tourney_id'
            , 'player_1_name', 'player_1_rank'
            , 'player_2_name', 'player_2_rank']]
 
 # %%
+
 # replace the winner and loser columns with player_1 and player_2 for the matches dataset
 matches_processed_df= hide_winner_loser(matches_processed_df)
 matches_processed_df.head()
@@ -672,7 +675,9 @@ matches_processed_df[['player_1_rank', 'player_2_rank']].describe()
 
 # %%
 # make a new copy of the dataframe, for starting the feature engineering
+
 matches_features_df = matches_processed_df.copy().reset_index()
+
 matches_features_df.info()
 # matches_features_df.to_csv("matches_features_df.csv", sep=',', header=True)
 
@@ -742,6 +747,7 @@ matches_processed_df[['tourney_id','match_num', 'player_1_id','player_2_id',
 
 # %% [markdown]
 # ### Add feature for ranking difference
+
 # This feature may help our model more easily assess the how the ranking plays a factor in determining the winner of the match. It simply calculates the weight of the difference between player_2_rank and player_1_rank, by using a normalized difference. The normalized difference is expressed as a number between 0 and 1. In that case, the closer the ranking between player 1 and player 2, the higher the number will be.
 
 # %%
@@ -750,6 +756,7 @@ max_possible_rank_difference = max(matches_features_df['player_2_rank'] - matche
 
 # calculate normalized rank difference
 matches_features_df['ranking_difference'] = 1 - ((matches_features_df['player_2_rank'] - matches_features_df['player_1_rank']) / max_possible_rank_difference)
+
 
 # preview the result for the last 5 observations of the dataset
 matches_features_df[['tourney_date_dt', 'player_1_name', 'player_1_rank','player_2_name', 'player_2_rank', 'ranking_difference']].tail(5)
@@ -895,6 +902,7 @@ def calc_cum_match_counts_and_pct (df):
             player_tourney_level_cumulative_wins[(player_2_id, tourney_level)] = player_2_tourney_level_cumulative_wins + 1
 
     # Add the cumulative match count and surface- and tourney level-related columns to the input dataset
+
     df['player_1_cum_match_count'] = player_1_cumulative_counts_list
     df['player_2_cum_match_count'] = player_2_cumulative_counts_list
     df['player_1_surface_cum_match_count'] = player_1_surface_cumulative_counts_list
@@ -909,7 +917,7 @@ def calc_cum_match_counts_and_pct (df):
     # Add win percentage difference columns for surface- and tourney level
     df['surface_win_pct_difference'] = df['player_1_surface_cum_win_percentage'] - df['player_2_surface_cum_win_percentage']
     df['tourney_level_win_pct_difference'] = df['player_1_tourney_level_cum_win_percentage'] - df['player_2_tourney_level_cum_win_percentage']
-    
+
     return df
 
 
@@ -941,6 +949,7 @@ matches_features_df[(matches_features_df['player_1_name'] == 'Thomas Enqvist')
                                                                                 , 'player_1_surface_cum_win_percentage','player_2_surface_cum_win_percentage'
                                                                                 , 'player_1_tourney_level_cum_win_percentage','player_2_tourney_level_cum_win_percentage'
                                                                                 , 'surface_win_pct_difference', 'tourney_level_win_pct_difference']]
+
 
 # %%
 # test for 4 tournaments, each on different surface
@@ -992,6 +1001,7 @@ def calc_h2h_win_pct(df):
         # Update head-to-head stats for the player pair
         h2h_stats[player_pair_key] = h2h_stats.get(player_pair_key, {'ppk_1_wins': 0, 'ppk_2_wins': 0, 'matches': 0}) # ppk stands for "player pair key"
 
+
         # Calculate and update head-to-head win percentages
         if h2h_stats[player_pair_key]['matches'] == 0:
             # At the first match, both win percentages are set to 0
@@ -1012,7 +1022,6 @@ def calc_h2h_win_pct(df):
             h2h_stats[player_pair_key]['ppk_1_wins'] += 1
         else:
             h2h_stats[player_pair_key]['ppk_2_wins'] += 1
-
     return df
 
 # %%
@@ -1159,6 +1168,42 @@ ax.set_title("Correlations of variables in the full dataset")
 plt.show()
 
 # %% [markdown]
+# Observations:
+# - surface and tourney level have a strong correlation of 0.68 to 0.7
+# 
+# It could be beneficial to remove strongly correlated variables depending on the chosen model in order to resolve the problem of multicollinearity.
+
+# %% [markdown]
+# ### Cleanup
+# Now that the initial datasets have been used, we cleaup the pandas dataframes which are not required anymore to mitigate excessive memory consumption.
+
+# %%
+'''
+import gc
+
+del matches_2players
+del matches_4surfaces
+del matches_5levels
+del matches_4surfaces_calc
+del matches_df
+del matches_empty_rank
+del matches_features_df
+del matches_features_trimmed_df
+del matches_lessthan_0mins
+del matches_pred_df
+del matches_processed_df
+del matches_processed_ka_df
+del matches_score_text
+del matches_tournament_starts
+del matches_wins_by_ranking_df
+del matches_with_rank
+
+# Invoke garbage collector immediately
+gc.collect()
+
+'''
+
+# %% [markdown]
 # ## Prediction
 
 # %% [markdown]
@@ -1227,40 +1272,294 @@ def plot_variable_importance(model, X_train):
   plt.title('Features Importances')
 
 # %% [markdown]
-# ### Decision Tree Model
+# ### Create Train and Test data
+# We will reuse 2  data sets for training each model and then testing (evaluating) the model performance.
+
+# %%
+X = train.drop("winner_player_2", axis=1)
+y = train["winner_player_2"]
+
+# %%
+X
+
+# %%
+y
+
+# %% [markdown]
+# ### Model 1: Decision Tree
+
+# %% [markdown]
+# #### Model Creation
+# Cross validation and hyperparameter optimisation was done separately - see below
 
 # %%
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, classification_report
 
-# Instantiate Model with cross validation
-tree = DecisionTreeClassifier(criterion="entropy", max_depth=1, max_features = 8, min_samples_leaf = 1, min_samples_split = 2, random_state=1)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.3, random_state = 8)
 
-# Create Train Data
-X = train.drop("winner_player_2", axis=1)
-y = train["winner_player_2"]
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=12)
+# 1. Instantiate Model
+model1_tree = DecisionTreeClassifier(criterion="entropy", max_depth=1, max_features = 8, min_samples_leaf = 1, min_samples_split = 2, random_state=1)
 
-# fit model
-tree.fit(X_train, y_train)
+# 2. Fit model
+model1_tree.fit(X_train, y_train)
 
-#make prediction
-y_pred = tree.predict(X_test)
+# 3. Make prediction
+y_pred = model1_tree.predict(X_test)
 
-# get prediction probabilities
-tree.predict_proba(X_test)
+# 4. Get prediction probabilities
+model1_tree.predict_proba(X_test)
 
-# Evaluate Model Performance - accuracy
+# 5. Evaluate Model Performance - accuracy
 acc = accuracy_score(y_test, y_pred)
 print('Accuracy: %.3f' % acc)
 
+# 6. Print classification report
+# y_pred =  (model1_tree.predict_proba(X_test)[:, 1] > 0.1).astype(int)
+# print(classification_report(y_test, y_pred))
+
+###########
+# Run on 12.12
+# (criterion="entropy", max_depth=1, max_features = 8, min_samples_leaf = 1, min_samples_split = 2, random_state=1)#
+# Accuracy score: 0.667 
+###########
+
+
 # %% [markdown]
-# For a Decision Tree model, with 66.4% there is a slightly better accuracy than our benchmark of 65.6%.
+# For a Decision Tree model, with 66.7% there is a slightly better accuracy than our benchmark of 65.6%.
 
 # %%
 plot_confusion_matrix(y_test, y_pred)
 
+# %% [markdown]
+# #### Visualization of the results
+
+# %%
+plot_variable_importance(model1_tree, X_train)
+
+# %% [markdown]
+# #### Cross validation and hyperparameter optimisation
+
+# %%
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import make_scorer
+
+# 1. Define hyperparameters for GridSearchCV
+parameters = {
+            "max_features": [4, 8, 16],
+            'max_depth': range(1,4),
+            "min_samples_split": [2, 3, 5, 7], 
+            'min_samples_leaf': [1, 10, 20, 50]
+            }
+
+# 2. Define a scoring function for accuracy
+acc_score = make_scorer(accuracy_score, greater_is_better=True)
+
+# 3. Define GridSearch CV object
+model1_tree_CV = GridSearchCV(model1_tree, parameters, scoring=acc_score, cv=5,verbose=3) # Apply 5 Cross Validiation Folds to find best hyperparameters
+
+# 4. Fit GridSearch CV object to model
+model1_tree_CV_fitted= model1_tree_CV.fit(X_train, y_train)
+
+# 5. Interpret results
+print("Best hyperparameters:", model1_tree_CV_fitted.best_params_)
+
+# 6) Evaluation Generalization Performance
+y_pred_model1 = model1_tree_CV.predict(X_test)
+
+acc = accuracy_score(y_test, y_pred_model1)
+print('Accuracy: %.3f' % acc)
+
+##########
+# Tested:
+# parameters = {
+#             "max_features": [4, 8, 16],
+#             'max_depth': range(1,4),
+#             "min_samples_split": [2, 3, 5, 7], 
+#             'min_samples_leaf': [1, 10, 20, 50]
+#             }
+# Results:
+# Best hyperparameters: {'max_depth': 3, 'max_features': 4, 'min_samples_leaf': 1, 'min_samples_split': 2}
+# Accuracy: 0.665
+##########
+
+
+
+# %% [markdown]
+# ###  Model 2: Random Forest Model
+
+# %% [markdown]
+# #### Model creation and cross validation 
+
+# %% [markdown]
+# 1st attempt (Model 2.1.1)
+# 
+
+# %%
+# Test at 12.12 10:30 
+# Test duration 40m
+
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.metrics import accuracy_score, classification_report, make_scorer
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=8)
+
+# 1. Instantiate Model
+model2_1_1_rf = RandomForestClassifier(random_state=1)
+
+# 2. Define hyperparameters for GridSearchCV
+parameters = {
+            'n_estimators': [500, 1000],
+            # 'max_features': [4, 8, 16],
+            # 'max_depth': [10, 20, 30, 40, None],
+            'min_samples_split': [3, 5, 7], 
+            # 'min_samples_leaf': [1, 10, 20, 50]
+            }
+
+# 3. Define GridSearchCV object
+acc_score = make_scorer(accuracy_score, greater_is_better=True)
+model2_1_1_rf_CV = GridSearchCV(model2_1_1_rf, parameters, cv=5, scoring=acc_score, verbose=3)
+
+
+# 2. Fit GridSearchCV to model data
+model2_1_1_rf_CV_fitted = model2_1_1_rf_CV.fit(X_train, y_train)
+
+# 3. Interpret results
+print("Best hyperparameters:", model2_1_1_rf_CV_fitted.best_params_)
+
+# 4. Get prediction probabilities
+# y_pred_model2_1_1.predict_proba(X_test)
+
+# 5. Evaluate Model Performance - accuracy
+y_pred_model2_1_1 = model2_1_1_rf_CV.predict(X_test)
+model2_1_1_acc = accuracy_score(y_test, y_pred_model2_1_1)
+print('Accuracy: %.3f' % model2_1_1_acc)
+
+# 6. Print classification report
+# y_pred =  (model2_1_1_rf.predict_proba(X_test)[:, 1] > 0.1).astype(int)
+# print(classification_report(y_test, y_pred_model2_1_1))
+
+###########
+# Tested
+#  parameters = {
+#               'n_estimators': [500, 1000],
+#               'min_samples_split': [3, 5, 7]
+#                }
+# Results
+# Best hyperparameters: {'min_samples_split': 7, 'n_estimators': 500}
+# Accuracy: 0.668
+###########
+
+
+# %% [markdown]
+# 2nd Attempt (Model 2.1.2)
+
+# %%
+# Test at 12.12 14:30
+# Test duration 55m
+
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split, RandomizedSearchCV 
+from sklearn.metrics import accuracy_score, classification_report
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=8)
+
+# 1. Instantiate Model
+model2_1_2_rf = RandomForestClassifier(random_state=1)
+
+# 2. Define hyperparameters for RandomizedSearchCV
+parameters = {
+            'n_estimators': [500, 700, 1000],
+            # 'max_features': [4, 8, 16],
+            'max_depth': [10, 20, 30, 40, None],
+            # 'min_samples_split': [2, 3, 5, 7], 
+            'min_samples_leaf': [1, 2, 4]
+            }
+
+# 3. Define RandomizedSearchCV object
+acc_score = make_scorer(accuracy_score, greater_is_better=True)
+model2_1_2_rf_CV = RandomizedSearchCV(model2_1_2_rf, parameters, cv=5, scoring=acc_score, verbose=3)
+
+
+# 2. Fit RandomizedSearchCV to model data
+model2_1_2_rf_CV_fitted = model2_1_2_rf_CV.fit(X_train, y_train)
+
+# 3. Interpret results
+print("Best hyperparameters:", model2_1_2_rf_CV_fitted.best_params_)
+
+# 4. Get prediction probabilities
+# y_pred_model2_1_1.predict_proba(X_test)
+
+# 5. Evaluate Model Performance - accuracy
+y_pred_model2_1_2 = model2_1_2_rf_CV.predict(X_test)
+model2_1_2_acc = accuracy_score(y_test, y_pred_model2_1_2)
+print('Accuracy: %.3f' % model2_1_2_acc)
+
+# 6. Print classification report
+# y_pred =  (model2_1_1_rf.predict_proba(X_test)[:, 1] > 0.1).astype(int)
+# print(classification_report(y_test, y_pred_model2_1_1))
+
+###########
+# Tested
+#  parameters = {
+#               'n_estimators': [500, 700, 1000],
+#               'max_depth': [10, 20, 30, 40, None],
+#               'min_samples_leaf': [1, 2, 4]
+#                }
+# Results
+# Best hyperparameters: {'n_estimators': 700, 'min_samples_leaf': 1, 'max_depth': 10}
+# Accuracy: 0.676
+###########
+
+
+# %% [markdown]
+# Optimise the random state of the test data, as we assume the data are not distributed equally.
+
+# %%
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report
+
+random_state_value = 1
+results_random_state_comparison = []
+for random_state in range(1, 21):
+
+  X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=random_state_value)
+
+  # 1. Instantiate model
+  model2_rf  = RandomForestClassifier(random_state=1)
+
+  # 2. Fit Model to Data
+  reg = model2_rf.fit(X_train,y_train)
+
+  # 3. Make prediction
+  y_pred = model2_rf.predict(X_test)
+
+  # 4. Evaluate Model Performance - accuracy
+  acc = accuracy_score(y_test, y_pred)
+  #print('Accuracy: %.3f' % acc)
+
+  results_random_state_comparison.append((random_state_value, acc))
+  random_state_value = random_state_value+1
+
+df_random_state_results = pd.DataFrame(results_random_state_comparison, columns=['Random State', 'Accuracy'])
+print(df_random_state_results)
+
+# Result:
+# Top 2 random_states
+# randam_state 8 -> Accuracy 0.658
+# random_state 10, 17, 18, etc. -> Accuracy 0.656
+
+# Conclusion: Only random_state 8 will be used from now on as a parameter for the train_test_split() method. All previous models are adapted to 
+#             use random_state 8.
+
+# %%
+plot_variable_importance(model2_1_2_rf_CV_fitted.best_estimator_, X_train)
+
+# %% [markdown]
+# ### Model 3: Gradient Booster Tree Model
+=======
 # %%
 X.info()
 
@@ -1360,7 +1659,7 @@ forest_model_CV.best_params_
 # %%
 from sklearn.ensemble import GradientBoostingClassifier
 
-boostedtrees = GradientBoostingClassifier(max_depth= 2, max_features = 8, min_samples_leaf = 1, min_samples_split = 5, n_estimators = 1000, 
+boostedtrees = GradientBoostingClassifier(max_depth= 2, max_features = 8, min_samples_leaf = 10, min_samples_split = 5, n_estimators = 1000, 
                                          # learning_rate= 0.5,
                                         random_state=1)
 
@@ -1381,9 +1680,9 @@ print(boostedtrees.predict_proba(X_test))
 accuracy_score(y_test, y_pred)
 
 ###########
-# Run on 11.12
+# Run on 07.12
 # Accuracy score: 0.6736 
-# (max_depth= 2, max_features = 8, min_samples_leaf = 1, min_samples_split = 5, n_estimators = 1000, random_state=1)#
+# (max_depth= 2, max_features = 8, min_samples_leaf = 10, min_samples_split = 5, n_estimators = 1000, random_state=1)#
 ###########
 
 # %%
